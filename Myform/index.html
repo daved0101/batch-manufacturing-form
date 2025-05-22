@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Manufacturing Record</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.2.0/dist/signature_pad.umd.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        h2 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 5px;
+        }
+        .section {
+            margin-bottom: 20px;
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+        input, select {
+            width: 100%;
+            padding: 5px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .error, .success {
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        .error { color: red; }
+        .success { color: green; }
+        label { display: block; margin: 5px 0; }
+        .signature-group { display: flex; gap: 10px; align-items: center; }
+        .signature-pad {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 200px;
+            height: 100px;
+            background-color: #f5f5f5;
+        }
+        .signature-upload {
+            display: none;
+        }
+        .signature-toggle {
+            margin: 5px 0;
+        }
+        .signature-preview {
+            width: 200px;
+            height: 100px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+    <h1>Interactive Batch Manufacturing Record</h1>
+
+    <!-- Export Controls -->
+    <div class="section" id="export-controls">
+        <h2>Export</h2>
+        <button onclick="exportToPDF()">Export to PDF</button>
+        <div id="export-message" class="error"></div>
+    </div>
+
+    <!-- Section 1: Product Details -->
+    <div class="section" id="product-details">
+        <h2>1. Product Details</h2>
+        <form id="product-details-form">
+            <label>Product Name: <input type="text" id="product-name" required></label>
+            <label>Colour: <input type="text" id="colour"></label>
+            <label>Shape: <input type="text" id="shape"></label>
+            <label>Batch/Lot Size: <input type="number" id="batch-size" min="0"></label>
+            <label>Approx. Quantity: <input type="number" id="approx-qty" min="0"></label>
+            <label>Primary and Secondary Packages: <input type="text" id="packaging"></label>
+            <label>Storage Conditions: <input type="text" id="storage-conditions"></label>
+            <button type="button" onclick="saveProductDetails()">Save Product Details</button>
+        </form>
+        <div id="product-details-message" class="error"></div>
+    </div>
+
+    <!-- Section 2: Reference Documents -->
+    <div class="section" id="reference-documents">
+        <h2>2. Reference Documents</h2>
+        <table id="reference-documents-table">
+            <thead>
+                <tr><th>Document Description</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="reference-documents-body"></tbody>
+        </table>
+        <div class="signature-group">
+            <label>Prepared By: <input type="text" id="ref-prepared-by"></label>
+            <label>Signature:
+                <div class="signature-toggle">
+                    <label><input type="radio" name="ref-signature-method" value="draw" checked onclick="toggleSignatureMethod('ref-signature')"> Draw</label>
+                    <label><input type="radio" name="ref-signature-method" value="upload" onclick="toggleSignatureMethod('ref-signature')"> Upload</label>
+                </div>
+                <div id="ref-signature-draw">
+                    <canvas id="ref-signature" class="signature-pad"></canvas>
+                    <button onclick="clearSignature('ref-signature')">Clear</button>
+                </div>
+                <div id="ref-signature-upload" class="signature-upload">
+                    <input type="file" id="ref-signature-file" accept="image/png,image/jpeg,image/jpg">
+                    <img id="ref-signature-preview" class="signature-preview" style="display:none;">
+                    <button onclick="clearUploadedSignature('ref-signature')">Remove</button>
+                </div>
+            </label>
+            <label>Date: <input type="date" id="ref-date"></label>
+        </div>
+        <button onclick="addReferenceDocumentRow()">Add Document</button>
+        <button onclick="saveReferenceDocuments()">Save Reference Documents</button>
+        <div id="reference-documents-message" class="error"></div>
+    </div>
+
+    <!-- Section 3: Raw Materials -->
+    <div class="section" id="raw-materials">
+        <h2>3. Raw Materials</h2>
+        <table id="raw-materials-table">
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    <th>Item Number</th>
+                    <th>Quantity Required (kg)</th>
+                    <th>Lot Number</th>
+                    <th>Qty Staged</th>
+                    <th>Performed By</th>
+                    <th>Checked By</th>
+                    <th>Verified By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="raw-materials-body"></tbody>
+        </table>
+        <button onclick="addRawMaterialRow()">Add Raw Material</button>
+        <button onclick="saveRawMaterials()">Save Raw Materials</button>
+        <div id="raw-materials-message" class="error"></div>
+    </div>
+
+    <!-- Section 4: Processing Equipment -->
+    <div class="section" id="processing-equipment">
+        <h2>4. Processing Equipment</h2>
+        <table id="processing-equipment-table">
+            <thead>
+                <tr>
+                    <th>Equipment Description</th>
+                    <th>ID No.</th>
+                    <th>Previous Calibration</th>
+                    <th>Calibration Required</th>
+                    <th>Performed By/Date</th>
+                    <th>Verified By/Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="processing-equipment-body"></tbody>
+        </table>
+        <button onclick="addEquipmentRow()">Add Equipment</button>
+        <button onclick="saveEquipment()">Save Equipment</button>
+        <div id="processing-equipment-message" class="error"></div>
+    </div>
+
+    <!-- Section 5: Area Clearance -->
+    <div class="section" id="area-clearance">
+        <h2>5. Area Clearance</h2>
+        <table id="area-clearance-table">
+            <thead>
+                <tr><th>S/No</th><th>Step</th><th>Performed By/Date</th><th>Verified By/Date</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="area-clearance-body"></tbody>
+        </table>
+        <div class="signature-group">
+            <label>Prepared By (QA Division Head): <input type="text" id="area-prepared-by"></label>
+            <label>Signature:
+                <div class="signature-toggle">
+                    <label><input type="radio" name="area-signature-method" value="draw" checked onclick="toggleSignatureMethod('area-signature')"> Draw</label>
+                    <label><input type="radio" name="area-signature-method" value="upload" onclick="toggleSignatureMethod('area-signature')"> Upload</label>
+                </div>
+                <div id="area-signature-draw">
+                    <canvas id="area-signature" class="signature-pad"></canvas>
+                    <button onclick="clearSignature('area-signature')">Clear</button>
+                </div>
+                <div id="area-signature-upload" class="signature-upload">
+                    <input type="file" id="area-signature-file" accept="image/png,image/jpeg,image/jpg">
+                    <img id="area-signature-preview" class="signature-preview" style="display:none;">
+                    <button onclick="clearUploadedSignature('area-signature')">Remove</button>
+                </div>
+            </label>
+            <label>Date: <input type="date" id="area-date"></label>
+        </div>
+        <div class="signature-group">
+            <label>Verified By (RQAS Manager): <input type="text" id="area-verified-by"></label>
+            <label>Signature:
+                <div class="signature-toggle">
+                    <label><input type="radio" name="area-verified-signature-method" value="draw" checked onclick="toggleSignatureMethod('area-verified-signature')"> Draw</label>
+                    <label><input type="radio" name="area-verified-signature-method" value="upload" onclick="toggleSignatureMethod('area-verified-signature')"> Upload</label>
+                </div>
+                <div id="area-verified-signature-draw">
+                    <canvas id="area-verified-signature" class="signature-pad"></canvas>
+                    <button onclick="clearSignature('area-verified-signature')">Clear</button>
+                </div>
+                <div id="area-verified-signature-upload" class="signature-upload">
+                    <input type="file" id="area-verified-signature-file" accept="image/png,image/jpeg,image/jpg">
+                    <img id="area-verified-signature-preview" class="signature-preview" style="display:none;">
+                    <button onclick="clearUploadedSignature('area-verified-signature')">Remove</button>
+                </div>
+            </label>
+            <label>Date: <input type="date" id="area-verified-date"></label>
+        </div>
+        <button onclick="addAreaClearanceRow()">Add Step</button>
+        <button onclick="saveAreaClearance()">Save Area Clearance</button>
+        <div id="area-clearance-message" class="error"></div>
+    </div>
+
+    <!-- Section 6: Production Procedure -->
+    <div class="section" id="production-procedure">
+        <h2>6. Production Procedure</h2>
+        <table id="production-procedure-table">
+            <thead>
+                <tr><th>Step</th><th>Performed By/Date</th><th>Verified By/Date</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="production-procedure-body"></tbody>
+        </table>
+        <button onclick="addProcedureRow()">Add Step</button>
+        <button onclick="saveProcedure()">Save Procedure</button>
+        <div id="production-procedure-message" class="error"></div>
+    </div>
+
+    <!-- Section 7: Sampling, Material Transfer, and Storage -->
+    <div class="section" id="sampling-transfer-storage">
+        <h2>7. Sampling, Material Transfer, and Storage</h2>
+        <table id="sampling-table">
+            <thead>
+                <tr><th>Description</th><th>Performed By/Date</th><th>Verified By/Date</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Raw material (fabric): verified COA as attached</td>
+                    <td><input type="text" class="sampling-performed" data-index="0"></td>
+                    <td><input type="text" class="sampling-verified" data-index="0"></td>
+                </tr>
+                <tr>
+                    <td>Raw material (chemicals): is verified at arrival as attached</td>
+                    <td><input type="text" class="sampling-performed" data-index="1"></td>
+                    <td><input type="text" class="sampling-verified" data-index="1"></td>
+                </tr>
+                <tr>
+                    <td>Finished fabric: checked as attached</td>
+                    <td><input type="text" class="sampling-performed" data-index="2"></td>
+                    <td><input type="text" class="sampling-verified" data-index="2"></td>
+                </tr>
+                <tr>
+                    <td>Packing condition: is checked using stratified random sample as attached</td>
+                    <td><input type="text" class="sampling-performed" data-index="3"></td>
+                    <td><input type="text" class="sampling-verified" data-index="3"></td>
+                </tr>
+            </tbody>
+        </table>
+        <table id="material-transfer-table">
+            <thead>
+                <tr><th>Description</th><th>Performed By/Date</th><th>Verified By/Date</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Finished good is transferred to warehouse after getting approval of quality assurance</td>
+                    <td><input type="text" class="transfer-performed" data-index="0"></td>
+                    <td><input type="text" class="transfer-verified" data-index="0"></td>
+                </tr>
+            </tbody>
+        </table>
+        <table id="storage-table">
+            <thead>
+                <tr><th>Description</th><th>Performed By/Date</th><th>Verified By/Date</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Storage is clean, dry, and ventilated</td>
+                    <td><input type="text" class="storage-performed" data-index="0"></td>
+                    <td><input type="text" class="storage-verified" data-index="0"></td>
+                </tr>
+            </tbody>
+        </table>
+        <button onclick="saveSamplingTransferStorage()">Save Section 7</button>
+        <div id="sampling-transfer-storage-message" class="error"></div>
+    </div>
+
+    <!-- Section 8: Production Batch Record Issuance -->
+    <div class="section" id="batch-record-issuance">
+        <h2>8. Production Batch Record Issuance</h2>
+        <div>
+            <p>Issued By: Production has approved and signed the batch record to ensure that the copy is a complete, accurate copy of the master batch record.</p>
+            <div class="signature-group">
+                <label>Issued By (Production): <input type="text" id="issue-production-by"></label>
+                <label>Signature:
+                    <div class="signature-toggle">
+                        <label><input type="radio" name="issue-production-signature-method" value="draw" checked onclick="toggleSignatureMethod('issue-production-signature')"> Draw</label>
+                        <label><input type="radio" name="issue-production-signature-method" value="upload" onclick="toggleSignatureMethod('issue-production-signature')"> Upload</label>
+                    </div>
+                    <div id="issue-production-signature-draw">
+                        <canvas id="issue-production-signature" class="signature-pad"></canvas>
+                        <button onclick="clearSignature('issue-production-signature')">Clear</button>
+                    </div>
+                    <div id="issue-production-signature-upload" class="signature-upload">
+                        <input type="file" id="issue-production-signature-file" accept="image/png,image/jpeg,image/jpg">
+                        <img id="issue-production-signature-preview" class="signature-preview" style="display:none;">
+                        <button onclick="clearUploadedSignature('issue-production-signature')">Remove</button>
+                    </div>
+                </label>
+                <label>Date: <input type="date" id="issue-production-date"></label>
+            </div>
+            <p>Issued To: Research and Quality Assurance Service has reviewed the Batch Record to ensure that the copy is a complete and correct.</p>
+            <div class="signature-group">
+                <label>Issued To (RQAS): <input type="text" id="issue-rqas-by"></label>
+                <label>Signature:
+                    <div class="signature-toggle">
+                        <label><input type="radio" name="issue-rqas-signature-method" value="draw" checked onclick="toggleSignatureMethod('issue-rqas-signature')"> Draw</label>
+                        <label><input type="radio" name="issue-rqas-signature-method" value="upload" onclick="toggleSignatureMethod('issue-rqas-signature')"> Upload</label>
+                    </div>
+                    <div id="issue-rqas-signature-draw">
+                        <canvas id="issue-rqas-signature" class="signature-pad"></canvas>
+                        <button onclick="clearSignature('issue-rqas-signature')">Clear</button>
+                    </div>
+                    <div id="issue-rqas-signature-upload" class="signature-upload">
+                        <input type="file" id="issue-rqas-signature-file" accept="image/png,image/jpeg,image/jpg">
+                        <img id="issue-rqas-signature-preview" class="signature-preview" style="display:none;">
+                        <button onclick="clearUploadedSignature('issue-rqas-signature')">Remove</button>
+                    </div>
+                </label>
+                <label>Date: <input type="date" id="issue-rqas-date"></label>
+            </div>
+        </div>
+        <button onclick="saveBatchIssuance()">Save Batch Issuance</button>
+        <div id="batch-record-issuance-message" class="error"></div>
+    </div>
+
+    <!-- Section 9: Post Production Review -->
+    <div class="section" id="post-production-review">
+        <h2>9. Post Production Review</h2>
+        <p>The complete Post-Production Batch Record has been reviewed for completeness and accuracy. All pages are complete and all entries conform to Good Documentation Practices.</p>
+        <table id="post-production-table">
+            <thead>
+                <tr><th>Department</th><th>Name</th><th>Signature</th><th>Date</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Gauze Bleaching & Finishing Production Department</td>
+                    <td><input type="text" class="post-production-name" data-index="0"></td>
+                    <td>
+                        <div class="signature-toggle">
+                            <label><input type="radio" name="post-production-signature-0-method" value="draw" checked onclick="toggleSignatureMethod('post-production-signature-0')"> Draw</label>
+                            <label><input type="radio" name="post-production-signature-0-method" value="upload" onclick="toggleSignatureMethod('post-production-signature-0')"> Upload</label>
+                        </div>
+                        <div id="post-production-signature-0-draw">
+                            <canvas id="post-production-signature-0" class="signature-pad"></canvas>
+                            <button onclick="clearSignature('post-production-signature-0')">Clear</button>
+                        </div>
+                        <div id="post-production-signature-0-upload" class="signature-upload">
+                            <input type="file" id="post-production-signature-0-file" accept="image/png,image/jpeg,image/jpg">
+                            <img id="post-production-signature-0-preview" class="signature-preview" style="display:none;">
+                            <button onclick="clearUploadedSignature('post-production-signature-0')">Remove</button>
+                        </div>
+                    </td>
+                    <td><input type="date" class="post-production-date" data-index="0"></td>
+                </tr>
+                <tr>
+                    <td>RQAS</td>
+                    <td><input type="text" class="post-production-name" data-index="1"></td>
+                    <td>
+                        <div class="signature-toggle">
+                            <label><input type="radio" name="post-production-signature-1-method" value="draw" checked onclick="toggleSignatureMethod('post-production-signature-1')"> Draw</label>
+                            <label><input type="radio" name="post-production-signature-1-method" value="upload" onclick="toggleSignatureMethod('post-production-signature-1')"> Upload</label>
+                        </div>
+                        <div id="post-production-signature-1-draw">
+                            <canvas id="post-production-signature-1" class="signature-pad"></canvas>
+                            <button onclick="clearSignature('post-production-signature-1')">Clear</button>
+                        </div>
+                        <div id="post-production-signature-1-upload" class="signature-upload">
+                            <input type="file" id="post-production-signature-1-file" accept="image/png,image/jpeg,image/jpg">
+                            <img id="post-production-signature-1-preview" class="signature-preview" style="display:none;">
+                            <button onclick="clearUploadedSignature('post-production-signature-1')">Remove</button>
+                        </div>
+                    </td>
+                    <td><input type="date" class="post-production-date" data-index="1"></td>
+                </tr>
+            </tbody>
+        </table>
+        <button onclick="savePostProduction()">Save Post Production Review</button>
+        <div id="post-production-message" class="error"></div>
+    </div>
+
+    <!-- Section 10: Product Release -->
+    <div class="section" id="product-release">
+        <h2>10. Product Release</h2>
+        <p>The material produced through the execution of this Batch Record shall be released by RQAS according to Product Release Procedure.</p>
+        <label>Lot No: <input type="text" id="lot-number"></label>
+        <label>MFG Date: <input type="date" id="mfg-date"></label>
+        <label>EXP Date: <input type="date" id="exp-date" value="2030-02-01"></label>
+        <table id="product-release-table">
+            <thead>
+                <tr><th>Role</th><th>Name</th><th>Signature</th><th>Date</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Gauze Bleaching And Finishing Production Department Manager</td>
+                    <td><input type="text" class="release-name" data-index="0"></td>
+                    <td>
+                        <div class="signature-toggle">
+                            <label><input type="radio" name="release-signature-0-method" value="draw" checked onclick="toggleSignatureMethod('release-signature-0')"> Draw</label>
+                            <label><input type="radio" name="release-signature-0-method" value="upload" onclick="toggleSignatureMethod('release-signature-0')"> Upload</label>
+                        </div>
+                        <div id="release-signature-0-draw">
+                            <canvas id="release-signature-0" class="signature-pad"></canvas>
+                            <button onclick="clearSignature('release-signature-0')">Clear</button>
+                        </div>
+                        <div id="release-signature-0-upload" class="signature-upload">
+                            <input type="file" id="release-signature-0-file" accept="image/png,image/jpeg,image/jpg">
+                            <img id="release-signature-0-preview" class="signature-preview" style="display:none;">
+                            <button onclick="clearUploadedSignature('release-signature-0')">Remove</button>
+                        </div>
+                    </td>
+                    <td><input type="date" class="release-date" data-index="0"></td>
+                </tr>
+                <tr>
+                    <td>Bleaching & Finishing Quality Assurance Division Head</td>
+                    <td><input type="text" class="release-name" data-index="1"></td>
+                    <td>
+                        <div class="signature-toggle">
+                            <label><input type="radio" name="release-signature-1-method" value="draw" checked onclick="toggleSignatureMethod('release-signature-1')"> Draw</label>
+                            <label><input type="radio" name="release-signature-1-method" value="upload" onclick="toggleSignatureMethod('release-signature-1')"> Upload</label>
+                        </div>
+                        <div id="release-signature-1-draw">
+                            <canvas id="release-signature-1" class="signature-pad"></canvas>
+                            <button onclick="clearSignature('release-signature-1')">Clear</button>
+                        </div>
+                        <div id="release-signature-1-upload" class="signature-upload">
+                            <input type="file" id="release-signature-1-file" accept="image/png,image/jpeg,image/jpg">
+                            <img id="release-signature-1-preview" class="signature-preview" style="display:none;">
+                            <button onclick="clearUploadedSignature('release-signature-1')">Remove</button>
+                        </div>
+                    </td>
+                    <td><input type="date" class="release-date" data-index="1"></td>
+                </tr>
+                <tr>
+                    <td>RQAS Manager</td>
+                    <td><input type="text" class="release-name" data-index="2"></td>
+                    <td>
+                        <div class="signature-toggle">
+                            <label><input type="radio" name="release-signature-2-method" value="draw" checked onclick="toggleSignatureMethod('release-signature-2')"> Draw</label>
+                            <label><input type="radio" name="release-signature-2-method" value="upload" onclick="toggleSignatureMethod('release-signature-2')"> Upload</label>
+                        </div>
+                        <div id="release-signature-2-draw">
+                            <canvas id="release-signature-2" class="signature-pad"></canvas>
+                            <button onclick="clearSignature('release-signature-2')">Clear</button>
+                        </div>
+                        <div id="release-signature-2-upload" class="signature-upload">
+                            <input type="file" id="release-signature-2-file" accept="image/png,image/jpeg,image/jpg">
+                            <img id="release-signature-2-preview" class="signature-preview" style="display:none;">
+                            <button onclick="clearUploadedSignature('release-signature-2')">Remove</button>
+                        </div>
+                    </td>
+                    <td><input type="date" class="release-date" data-index="2"></td>
+                </tr>
+            </tbody>
+        </table>
+        <button onclick="saveProductRelease()">Save Product Release</button>
+        <div id="product-release-message" class="error"></div>
+    </div>
+
+    <script>
+        // Initialize Signature Pads
+        const signaturePads = {};
+        const signatureMethods = {};
+        const canvasElements = [
+            'ref-signature', 'area-signature', 'area-verified-signature',
+            'issue-production-signature', 'issue-rqas-signature',
+            'post-production-signature-0', 'post-production-signature-1',
+            'release-signature-0', 'release-signature-1', 'release-signature-2'
+        ];
+        canvasElements.forEach(id => {
+            const canvas = document.getElementById(id);
+            if (canvas) {
+                signaturePads[id] = new SignaturePad(canvas, {
+                    penColor: 'black',
+                    backgroundColor: 'rgb(245,245,245)'
+                });
+                signatureMethods[id] = 'draw'; // Default to draw
+                // Handle file upload
+                const fileInput = document.getElementById(`${id}-file`);
+                fileInput?.addEventListener('change', (e) => handleFileUpload(id, e));
+            }
+        });
+
+        // Toggle between draw and upload
+        function toggleSignatureMethod(id) {
+            const drawDiv = document.getElementById(`${id}-draw`);
+            const uploadDiv = document.getElementById(`${id}-upload`);
+            const method = document.querySelector(`input[name="${id}-method"]:checked`).value;
+            signatureMethods[id] = method;
+            drawDiv.style.display = method === 'draw' ? 'block' : 'none';
+            uploadDiv.style.display = method === 'upload' ? 'block' : 'none';
+        }
+
+        // Handle file upload
+        function handleFileUpload(id, event) {
+            const file = event.target.files[0];
+            if (file && ['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const preview = document.getElementById(`${id}-preview`);
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                showMessage('export-message', 'Please upload a PNG or JPG image.');
+                event.target.value = '';
+            }
+        }
+
+        // Clear drawn signature
+        function clearSignature(id) {
+            if (signaturePads[id]) {
+                signaturePads[id].clear();
+            }
+        }
+
+        // Clear uploaded signature
+        function clearUploadedSignature(id) {
+            const fileInput = document.getElementById(`${id}-file`);
+            const preview = document.getElementById(`${id}-preview`);
+            fileInput.value = '';
+            preview.src = '';
+            preview.style.display = 'none';
+        }
+
+        // Get signature data (draw or upload)
+        function getSignature(id) {
+            if (signatureMethods[id] === 'draw' && !signaturePads[id].isEmpty()) {
+                return signaturePads[id].toDataURL();
+            } else if (signatureMethods[id] === 'upload') {
+                const preview = document.getElementById(`${id}-preview`);
+                return preview.src || '';
+            }
+            return '';
+        }
+
+        // Load all saved data on page load
+        window.onload = function() {
+            loadProductDetails();
+            loadReferenceDocuments();
+            loadRawMaterials();
+            loadEquipment();
+            loadAreaClearance();
+            loadProcedure();
+            loadSamplingTransferStorage();
+            loadBatchIssuance();
+            loadPostProduction();
+            loadProductRelease();
+        };
+
+        // Utility to show messages
+        function showMessage(elementId, message, isError = true) {
+            const element = document.getElementById(elementId);
+            element.className = isError ? 'error' : 'success';
+            element.innerText = message;
+            setTimeout(() => element.innerText = '', 3000);
+        }
+
+        // Export to PDF
+        function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            let y = 10;
+            const pageHeight = 297; // A4 height in mm
+            const pageWidth = 210; // A4 width in mm
+            const footerY = pageHeight - 10; // 10mm from bottom
+
+            // Helper to add footer
+            function addFooter() {
+                const productRelease = JSON.parse(localStorage.getItem('productRelease') || '{}');
+                const lotNo = productRelease.lotDetails?.lotNumber || 'N/A';
+                const mfgDate = productRelease.lotDetails?.mfgDate || new Date().toISOString().split('T')[0];
+                const expiryDate = 'Feb/2030';
+                const footerText = `Lot No: ${lotNo} | Manufacture Date: ${mfgDate} | Expiry Date: ${expiryDate}`;
+                doc.setFontSize(8);
+                doc.text(footerText, pageWidth / 2, footerY, { align: 'center' });
+            }
+
+            // Helper to add section to PDF
+            function addSection(title, data, yOffset) {
+                doc.setFontSize(14);
+                doc.text(title, 10, yOffset);
+                yOffset += 10;
+                doc.setFontSize(10);
+                if (Array.isArray(data)) {
+                    data.forEach((item, i) => {
+                        doc.text(`Record ${i + 1}:`, 10, yOffset);
+                        yOffset += 5;
+                        Object.keys(item).forEach(key => {
+                            if (!key.includes('Signature')) {
+                                doc.text(`${key}: ${item[key] || '-'}`, 15, yOffset);
+                                yOffset += 5;
+                            } else if (item[key]) {
+                                doc.addImage(item[key], 'PNG', 15, yOffset, 40, 20);
+                                yOffset += 25;
+                            }
+                        });
+                        if (yOffset > pageHeight - 30) {
+                            addFooter();
+                            doc.addPage();
+                            yOffset = 10;
+                        }
+                    });
+                } else if (typeof data === 'object') {
+                    Object.keys(data).forEach(key => {
+                        if (Array.isArray(data[key])) {
+                            doc.text(`${key}:`, 10, yOffset);
+                            yOffset += 5;
+                            data[key].forEach((item, i) => {
+                                doc.text(`Record ${i + 1}:`, 15, yOffset);
+                                yOffset += 5;
+                                Object.keys(item).forEach(subKey => {
+                                    if (!subKey.includes('Signature')) {
+                                        doc.text(`${subKey}: ${item[subKey] || '-'}`, 20, yOffset);
+                                        yOffset += 5;
+                                    } else if (item[subKey]) {
+                                        doc.addImage(item[subKey], 'PNG', 20, yOffset, 40, 20);
+                                        yOffset += 25;
+                                    }
+                                });
+                                if (yOffset > pageHeight - 30) {
+                                    addFooter();
+                                    doc.addPage();
+                                    yOffset = 10;
+                                }
+                            });
+                        } else if (!key.includes('Signature')) {
+                            doc.text(`${key}: ${data[key] || '-'}`, 10, yOffset);
+                            yOffset += 5;
+                        } else if (data[key]) {
+                            doc.addImage(data[key], 'PNG', 10, yOffset, 40, 20);
+                            yOffset += 25;
+                        }
+                    });
+                }
+                return yOffset;
+            }
+
+            // Collect data
+            const data = {
+                '1. Product Details': JSON.parse(localStorage.getItem('productDetails') || '{}'),
+                '2. Reference Documents': JSON.parse(localStorage.getItem('referenceDocuments') || '{}'),
+                '3. Raw Materials': JSON.parse(localStorage.getItem('rawMaterials') || '[]'),
+                '4. Processing Equipment': JSON.parse(localStorage.getItem('equipment') || '[]'),
+                '5. Area Clearance': JSON.parse(localStorage.getItem('areaClearance') || '{}'),
+                '6. Production Procedure': JSON.parse(localStorage.getItem('procedure') || '[]'),
+                '7. Sampling, Material Transfer, and Storage': JSON.parse(localStorage.getItem('samplingTransferStorage') || '{}'),
+                '8. Batch Record Issuance': JSON.parse(localStorage.getItem('batchIssuance') || '{}'),
+                '9. Post Production Review': JSON.parse(localStorage.getItem('postProduction') || '[]'),
+                '10. Product Release': JSON.parse(localStorage.getItem('productRelease') || '{}')
+            };
+
+            // Generate PDF
+            for (const [title, content] of Object.entries(data)) {
+                if (y > 250) {
+                    addFooter();
+                    doc.addPage();
+                    y = 10;
+                }
+                y = addSection(title, content, y);
+                y += 10;
+            }
+
+            // Add footer to the last page
+            addFooter();
+
+            doc.save(`BMR_${new Date().toISOString().split('T')[0]}.pdf`);
+            showMessage('export-message', 'Data exported as PDF successfully!', false);
+        }
+
+        // Section 1: Product Details
+        function saveProductDetails() {
+            const productName = document.getElementById('product-name').value;
+            if (!productName) {
+                showMessage('product-details-message', 'Product Name is required.');
+                return;
+            }
+            const details = {
+                productName, colour: document.getElementById('colour').value,
+                shape: document.getElementById('shape').value, batchSize: document.getElementById('batch-size').value,
+                approxQty: document.getElementById('approx-qty').value, packaging: document.getElementById('packaging').value,
+                storageConditions: document.getElementById('storage-conditions').value
+            };
+            localStorage.setItem('productDetails', JSON.stringify(details));
+            showMessage('product-details-message', 'Product Details saved successfully!', false);
+        }
+
+        function loadProductDetails() {
+            const details = JSON.parse(localStorage.getItem('productDetails') || '{}');
+            document.getElementById('product-name').value = details.productName || '';
+            document.getElementById('colour').value = details.colour || '';
+            document.getElementById('shape').value = details.shape || '';
+            document.getElementById('batch-size').value = details.batchSize || '';
+            document.getElementById('approx-qty').value = details.approxQty || '';
+            document.getElementById('packaging').value = details.packaging || '';
+            document.getElementById('storage-conditions').value = details.storageConditions || '';
+        }
+
+        // Section 2: Reference Documents
+        let referenceDocuments = JSON.parse(localStorage.getItem('referenceDocuments') || '{}').documents || [];
+        function addReferenceDocumentRow(data = {}) {
+            const tbody = document.getElementById('reference-documents-body');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" value="${data.description || ''}" class="desc"></td>
+                <td><button onclick="removeRow(this)">Remove</button></td>`;
+            tbody.appendChild(row);
+        }
+        function saveReferenceDocuments() {
+            const rows = document.querySelectorAll('#reference-documents-body tr');
+            referenceDocuments = [];
+            let hasError = false;
+            rows.forEach(row => {
+                const description = row.querySelector('.desc').value;
+                if (!description) {
+                    showMessage('reference-documents-message', 'Document Description is required.');
+                    hasError = true;
+                    return;
+                }
+                referenceDocuments.push({ description });
+            });
+            if (!hasError) {
+                const preparedBy = document.getElementById('ref-prepared-by').value;
+                if (!preparedBy) {
+                    showMessage('reference-documents-message', 'Prepared By is required.');
+                    return;
+                }
+                const signature = getSignature('ref-signature');
+                localStorage.setItem('referenceDocuments', JSON.stringify({
+                    documents: referenceDocuments,
+                    preparedBy, signature, date: document.getElementById('ref-date').value
+                }));
+                showMessage('reference-documents-message', 'Reference Documents saved successfully!', false);
+            }
+        }
+        function loadReferenceDocuments() {
+            const data = JSON.parse(localStorage.getItem('referenceDocuments') || '{}');
+            referenceDocuments = data.documents || [];
+            referenceDocuments.forEach(addReferenceDocumentRow);
+            document.getElementById('ref-prepared-by').value = data.preparedBy || '';
+            if (data.signature) {
+                const preview = document.getElementById('ref-signature-preview');
+                preview.src = data.signature;
+                preview.style.display = 'block';
+                document.querySelector('input[name="ref-signature-method"][value="upload"]').checked = true;
+                toggleSignatureMethod('ref-signature');
+                if (signaturePads['ref-signature']) {
+                    signaturePads['ref-signature'].fromDataURL(data.signature);
+                }
+            }
+            document.getElementById('ref-date').value = data.date || '';
+        }
+
+        // Section 3: Raw Materials
+        let rawMaterials = JSON.parse(localStorage.getItem('rawMaterials') || '[]');
+        function addRawMaterialRow(data = {}) {
+            const tbody = document.getElementById('raw-materials-body');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" value="${data.description || ''}" class="desc"></td>
+                <td><input type="text" value="${data.itemNumber || ''}" class="item"></td>
+                <td><input type="number" value="${data.quantity || ''}" class="qty" min="0"></td>
+                <td><input type="text" value="${data.lotNumber || ''}" class="lot"></td>
+                <td><input type="number" value="${data.qtyStaged || ''}" class="staged" min="0"></td>
+                <td><input type="text" value="${data.performedBy || ''}" class="performed"></td>
+                <td><input type="text" value="${data.checkedBy || ''}" class="checked"></td>
+                <td><input type="text" value="${data.verifiedBy || ''}" class="verified"></td>
+                <td><button onclick="removeRow(this)">Remove</button></td>`;
+            tbody.appendChild(row);
+        }
+        function saveRawMaterials() {
+            const rows = document.querySelectorAll('#raw-materials-body tr');
+            rawMaterials = [];
+            let hasError = false;
+            rows.forEach(row => {
+                const description = row.querySelector('.desc').value;
+                if (!description) {
+                    showMessage('raw-materials-message', 'Description is required for all raw materials.');
+                    hasError = true;
+                    return;
+                }
+                rawMaterials.push({
+                    description, itemNumber: row.querySelector('.item').value,
+                    quantity: row.querySelector('.qty').value, lotNumber: row.querySelector('.lot').value,
+                    qtyStaged: row.querySelector('.staged').value, performedBy: row.querySelector('.performed').value,
+                    checkedBy: row.querySelector('.checked').value, verifiedBy: row.querySelector('.verified').value
+                });
+            });
+            if (!hasError) {
+                localStorage.setItem('rawMaterials', JSON.stringify(rawMaterials));
+                showMessage('raw-materials-message', 'Raw Materials saved successfully!', false);
+            }
+        }
+        function loadRawMaterials() {
+            rawMaterials.forEach(addRawMaterialRow);
+        }
+
+        // Section 4: Processing Equipment
+        let equipment = JSON.parse(localStorage.getItem('equipment') || '[]');
+        function addEquipmentRow(data = {}) {
+            const tbody = document.getElementById('processing-equipment-body');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" value="${data.description || ''}" class="desc"></td>
+                <td><input type="text" value="${data.idNo || ''}" class="id"></td>
+                <td><input type="date" value="${data.prevCalibration || ''}" class="prev"></td>
+                <td><input type="text" value="${data.calibrationRequired || ''}" class="req"></td>
+                <td><input type="text" value="${data.performedBy || ''}" class="performed"></td>
+                <td><input type="text" value="${data.verifiedBy || ''}" class="verified"></td>
+                <td><button onclick="removeRow(this)">Remove</button></td>`;
+            tbody.appendChild(row);
+        }
+        function saveEquipment() {
+            const rows = document.querySelectorAll('#processing-equipment-body tr');
+            equipment = [];
+            let hasError = false;
+            rows.forEach(row => {
+                const description = row.querySelector('.desc').value;
+                if (!description) {
+                    showMessage('processing-equipment-message', 'Equipment Description is required.');
+                    hasError = true;
+                    return;
+                }
+                equipment.push({
+                    description, idNo: row.querySelector('.id').value,
+                    prevCalibration: row.querySelector('.prev').value, calibrationRequired: row.querySelector('.req').value,
+                    performedBy: row.querySelector('.performed').value, verifiedBy: row.querySelector('.verified').value
+                });
+            });
+            if (!hasError) {
+                localStorage.setItem('equipment', JSON.stringify(equipment));
+                showMessage('processing-equipment-message', 'Equipment saved successfully!', false);
+            }
+        }
+        function loadEquipment() {
+            equipment.forEach(addEquipmentRow);
+        }
+
+        // Section 5: Area Clearance
+        let areaClearance = JSON.parse(localStorage.getItem('areaClearance') || '{}');
+        function addAreaClearanceRow(data = {}) {
+            const tbody = document.getElementById('area-clearance-body');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="number" value="${data.sno || ''}" class="sno" min="1"></td>
+                <td><input type="text" value="${data.step || ''}" class="step"></td>
+                <td><input type="text" value="${data.performedBy || ''}" class="performed"></td>
+                <td><input type="text" value="${data.verifiedBy || ''}" class="verified"></td>
+                <td><button onclick="removeRow(this)">Remove</button></td>`;
+            tbody.appendChild(row);
+        }
+        function saveAreaClearance() {
+            const rows = document.querySelectorAll('#area-clearance-body tr');
+            areaClearance.steps = [];
+            let hasError = false;
+            rows.forEach(row => {
+                const step = row.querySelector('.step').value;
+                if (!step) {
+                    showMessage('area-clearance-message', 'Step description is required.');
+                    hasError = true;
+                    return;
+                }
+                areaClearance.steps.push({
+                    sno: row.querySelector('.sno').value, step,
+                    performedBy: row.querySelector('.performed').value, verifiedBy: row.querySelector('.verified').value
+                });
+            });
+            const preparedBy = document.getElementById('area-prepared-by').value;
+            if (!preparedBy) {
+                showMessage('area-clearance-message', 'Prepared By is required.');
+                return;
+            }
+            const signature = getSignature('area-signature');
+            const verifiedSignature = getSignature('area-verified-signature');
+            areaClearance.signatures = {
+                preparedBy, signature, date: document.getElementById('area-date').value,
+                verifiedBy: document.getElementById('area-verified-by').value,
+                verifiedSignature, verifiedDate: document.getElementById('area-verified-date').value
+            };
+            if (!hasError) {
+                localStorage.setItem('areaClearance', JSON.stringify(areaClearance));
+                showMessage('area-clearance-message', 'Area Clearance saved successfully!', false);
+            }
+        }
+        function loadAreaClearance() {
+            areaClearance.steps?.forEach(addAreaClearanceRow);
+            const signatures = areaClearance.signatures || {};
+            document.getElementById('area-prepared-by').value = signatures.preparedBy || '';
+            if (signatures.signature) {
+                const preview = document.getElementById('area-signature-preview');
+                preview.src = signatures.signature;
+                preview.style.display = 'block';
+                document.querySelector('input[name="area-signature-method"][value="upload"]').checked = true;
+                toggleSignatureMethod('area-signature');
+                if (signaturePads['area-signature']) {
+                    signaturePads['area-signature'].fromDataURL(signatures.signature);
+                }
+            }
+            document.getElementById('area-date').value = signatures.date || '';
+            document.getElementById('area-verified-by').value = signatures.verifiedBy || '';
+            if (signatures.verifiedSignature) {
+                const preview = document.getElementById('area-verified-signature-preview');
+                preview.src = signatures.verifiedSignature;
+                preview.style.display = 'block';
+                document.querySelector('input[name="area-verified-signature-method"][value="upload"]').checked = true;
+                toggleSignatureMethod('area-verified-signature');
+                if (signaturePads['area-verified-signature']) {
+                    signaturePads['area-verified-signature'].fromDataURL(signatures.verifiedSignature);
+                }
+            }
+            document.getElementById('area-verified-date').value = signatures.verifiedDate || '';
+        }
+
+        // Section 6: Production Procedure
+        let procedure = JSON.parse(localStorage.getItem('procedure') || '[]');
+        function addProcedureRow(data = {}) {
+            const tbody = document.getElementById('production-procedure-body');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" value="${data.step || ''}" class="step"></td>
+                <td><input type="text" value="${data.performedBy || ''}" class="performed"></td>
+                <td><input type="text" value="${data.verifiedBy || ''}" class="verified"></td>
+                <td><button onclick="removeRow(this)">Remove</button></td>`;
+            tbody.appendChild(row);
+        }
+        function saveProcedure() {
+            const rows = document.querySelectorAll('#production-procedure-body tr');
+            procedure = [];
+            let hasError = false;
+            rows.forEach(row => {
+                const step = row.querySelector('.step').value;
+                if (!step) {
+                    showMessage('production-procedure-message', 'Step description is required.');
+                    hasError = true;
+                    return;
+                }
+                procedure.push({
+                    step, performedBy: row.querySelector('.performed').value,
+                    verifiedBy: row.querySelector('.verified').value
+                });
+            });
+            if (!hasError) {
+                localStorage.setItem('procedure', JSON.stringify(procedure));
+                showMessage('production-procedure-message', 'Procedure saved successfully!', false);
+            }
+        }
+        function loadProcedure() {
+            procedure.forEach(addProcedureRow);
+        }
+
+        // Section 7: Sampling, Material Transfer, and Storage
+        let samplingTransferStorage = JSON.parse(localStorage.getItem('samplingTransferStorage') || '{}');
+        function saveSamplingTransferStorage() {
+            const samplingRows = document.querySelectorAll('.sampling-performed');
+            samplingTransferStorage.sampling = Array.from(samplingRows).map((input, i) => ({
+                performedBy: input.value, verifiedBy: document.querySelector(`.sampling-verified[data-index="${i}"]`).value
+            }));
+            const transferRows = document.querySelectorAll('.transfer-performed');
+            samplingTransferStorage.transfer = Array.from(transferRows).map((input, i) => ({
+                performedBy: input.value, verifiedBy: document.querySelector(`.transfer-verified[data-index="${i}"]`).value
+            }));
+            const storageRows = document.querySelectorAll('.storage-performed');
+            samplingTransferStorage.storage = Array.from(storageRows).map((input, i) => ({
+                performedBy: input.value, verifiedBy: document.querySelector(`.storage-verified[data-index="${i}"]`).value
+            }));
+            localStorage.setItem('samplingTransferStorage', JSON.stringify(samplingTransferStorage));
+            showMessage('sampling-transfer-storage-message', 'Section 7 saved successfully!', false);
+        }
+        function loadSamplingTransferStorage() {
+            samplingTransferStorage.sampling?.forEach((data, i) => {
+                const performed = document.querySelector(`.sampling-performed[data-index="${i}"]`);
+                const verified = document.querySelector(`.sampling-verified[data-index="${i}"]`);
+                if (performed) performed.value = data.performedBy || '';
+                if (verified) verified.value = data.verifiedBy || '';
+            });
+            samplingTransferStorage.transfer?.forEach((data, i) => {
+                const performed = document.querySelector(`.transfer-performed[data-index="${i}"]`);
+                const verified = document.querySelector(`.transfer-verified[data-index="${i}"]`);
+                if (performed) performed.value = data.performedBy || '';
+                if (verified) verified.value = data.verifiedBy || '';
+            });
+            samplingTransferStorage.storage?.forEach((data, i) => {
+                const performed = document.querySelector(`.storage-performed[data-index="${i}"]`);
+                const verified = document.querySelector(`.storage-verified[data-index="${i}"]`);
+                if (performed) performed.value = data.performedBy || '';
+                if (verified) verified.value = data.verifiedBy || '';
+            });
+        }
+
+        // Section 8: Batch Record Issuance
+        function saveBatchIssuance() {
+            const productionBy = document.getElementById('issue-production-by').value;
+            if (!productionBy) {
+                showMessage('batch-record-issuance-message', 'Issued By (Production) is required.');
+                return;
+            }
+            const issuance = {
+                productionBy, productionSignature: getSignature('issue-production-signature'),
+                productionDate: document.getElementById('issue-production-date').value,
+                rqasBy: document.getElementById('issue-rqas-by').value,
+                rqasSignature: getSignature('issue-rqas-signature'),
+                rqasDate: document.getElementById('issue-rqas-date').value
+            };
+            localStorage.setItem('batchIssuance', JSON.stringify(issuance));
+            showMessage('batch-record-issuance-message', 'Batch Issuance saved successfully!', false);
+        }
+        function loadBatchIssuance() {
+            const data = JSON.parse(localStorage.getItem('batchIssuance') || '{}');
+            document.getElementById('issue-production-by').value = data.productionBy || '';
+            if (data.productionSignature) {
+                const preview = document.getElementById('issue-production-signature-preview');
+                preview.src = data.productionSignature;
+                preview.style.display = 'block';
+                document.querySelector('input[name="issue-production-signature-method"][value="upload"]').checked = true;
+                toggleSignatureMethod('issue-production-signature');
+                if (signaturePads['issue-production-signature']) {
+                    signaturePads['issue-production-signature'].fromDataURL(data.productionSignature);
+                }
+            }
+            document.getElementById('issue-production-date').value = data.productionDate || '';
+            document.getElementById('issue-rqas-by').value = data.rqasBy || '';
+            if (data.rqasSignature) {
+                const preview = document.getElementById('issue-rqas-signature-preview');
+                preview.src = data.rqasSignature;
+                preview.style.display = 'block';
+                document.querySelector('input[name="issue-rqas-signature-method"][value="upload"]').checked = true;
+                toggleSignatureMethod('issue-rqas-signature');
+                if (signaturePads['issue-rqas-signature']) {
+                    signaturePads['issue-rqas-signature'].fromDataURL(data.rqasSignature);
+                }
+            }
+            document.getElementById('issue-rqas-date').value = data.rqasDate || '';
+        }
+
+        // Section 9: Post Production Review
+        let postProduction = JSON.parse(localStorage.getItem('postProduction') || '[]');
+        function savePostProduction() {
+            const rows = document.querySelectorAll('.post-production-name');
+            postProduction = Array.from(rows).map((input, i) => ({
+                name: input.value,
+                signature: getSignature(`post-production-signature-${i}`),
+                date: document.querySelector(`.post-production-date[data-index="${i}"]`).value
+            }));
+            if (!postProduction[0].name) {
+                showMessage('post-production-message', 'Name for Production Department is required.');
+                return;
+            }
+            localStorage.setItem('postProduction', JSON.stringify(postProduction));
+            showMessage('post-production-message', 'Post Production Review saved successfully!', false);
+        }
+        function loadPostProduction() {
+            postProduction.forEach((data, i) => {
+                const name = document.querySelector(`.post-production-name[data-index="${i}"]`);
+                const date = document.querySelector(`.post-production-date[data-index="${i}"]`);
+                if (name) name.value = data.name || '';
+                if (data.signature) {
+                    const preview = document.getElementById(`post-production-signature-${i}-preview`);
+                    preview.src = data.signature;
+                    preview.style.display = 'block';
+                    document.querySelector(`input[name="post-production-signature-${i}-method"][value="upload"]`).checked = true;
+                    toggleSignatureMethod(`post-production-signature-${i}`);
+                    if (signaturePads[`post-production-signature-${i}`]) {
+                        signaturePads[`post-production-signature-${i}`].fromDataURL(data.signature);
+                    }
+                }
+                if (date) date.value = data.date || '';
+            });
+        }
+
+        // Section 10: Product Release
+        let productRelease = JSON.parse(localStorage.getItem('productRelease') || '{}');
+        function saveProductRelease() {
+            const lotNumber = document.getElementById('lot-number').value;
+            if (!lotNumber) {
+                showMessage('product-release-message', 'Lot Number is required.');
+                return;
+            }
+            const rows = document.querySelectorAll('.release-name');
+            productRelease.signatories = Array.from(rows).map((input, i) => ({
+                name: input.value,
+                signature: getSignature(`release-signature-${i}`),
+                date: document.querySelector(`.release-date[data-index="${i}"]`).value
+            }));
+            if (!productRelease.signatories[0].name) {
+                showMessage('product-release-message', 'Name for Production Department Manager is required.');
+                return;
+            }
+            productRelease.lotDetails = {
+                lotNumber,
+                mfgDate: document.getElementById('mfg-date').value,
+                expDate: document.getElementById('exp-date').value
+            };
+            localStorage.setItem('productRelease', JSON.stringify(productRelease));
+            showMessage('product-release-message', 'Product Release saved successfully!', false);
+        }
+        function loadProductRelease() {
+            document.getElementById('lot-number').value = productRelease.lotDetails?.lotNumber || '';
+            document.getElementById('mfg-date').value = productRelease.lotDetails?.mfgDate || '';
+            document.getElementById('exp-date').value = productRelease.lotDetails?.expDate || '2030-02-01';
+            productRelease.signatories?.forEach((data, i) => {
+                const name = document.querySelector(`.release-name[data-index="${i}"]`);
+                const date = document.querySelector(`.release-date[data-index="${i}"]`);
+                if (name) name.value = data.name || '';
+                if (data.signature) {
+                    const preview = document.getElementById(`release-signature-${i}-preview`);
+                    preview.src = data.signature;
+                    preview.style.display = 'block';
+                    document.querySelector(`input[name="release-signature-${i}-method"][value="upload"]`).checked = true;
+                    toggleSignatureMethod(`release-signature-${i}`);
+                    if (signaturePads[`release-signature-${i}`]) {
+                        signaturePads[`release-signature-${i}`].fromDataURL(data.signature);
+                    }
+                }
+                if (date) date.value = data.date || '';
+            });
+        }
+
+        // Utility to remove table rows
+        function removeRow(button) {
+            button.parentElement.parentElement.remove();
+        }
+    </script>
+</body>
+</html>
